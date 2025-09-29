@@ -1,6 +1,6 @@
 package com.mulesoft.connectors.inference.internal.service;
 
-import org.mule.runtime.api.scheduler.SchedulerService;
+import org.mule.runtime.api.scheduler.Scheduler;
 import org.mule.runtime.extension.api.client.ExtensionsClient;
 import org.mule.runtime.extension.api.exception.ModuleException;
 import org.mule.runtime.extension.api.runtime.operation.Result;
@@ -19,6 +19,7 @@ import com.mulesoft.connectors.inference.internal.helpers.payload.RequestPayload
 import com.mulesoft.connectors.inference.internal.helpers.request.HttpRequestHelper;
 import com.mulesoft.connectors.inference.internal.helpers.response.HttpResponseHelper;
 import com.mulesoft.connectors.inference.internal.helpers.response.mapper.DefaultResponseMapper;
+import com.mulesoft.connectors.inference.internal.utils.ParseUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,48 +54,63 @@ public class TextGenerationService implements BaseService {
     this.objectMapper = objectMapper;
   }
 
-  public Result<InputStream, LLMResponseAttributes> executeChatAnswerPrompt(TextGenerationConnection connection, String prompt)
+  public Result<InputStream, LLMResponseAttributes> executeChatAnswerPrompt(TextGenerationConnection connection, String prompt,
+                                                                            InputStream additionalRequestAttributes)
       throws IOException, TimeoutException {
 
     return executeChatRequestAndFormatResponse(connection,
-                                               payloadHelper.buildChatAnswerPromptPayload(connection, prompt));
+                                               payloadHelper.buildChatAnswerPromptPayload(connection, prompt,
+                                                                                          ParseUtils
+                                                                                              .parseAdditionalRequestAttributes(additionalRequestAttributes,
+                                                                                                                                objectMapper)));
   }
 
   public Result<InputStream, LLMResponseAttributes> executeChatCompletion(TextGenerationConnection connection,
-                                                                          InputStream messages)
+                                                                          InputStream messages,
+                                                                          InputStream additionalRequestAttributes)
       throws IOException, TimeoutException {
 
-    TextGenerationRequestPayloadDTO requestPayloadDTO = payloadHelper.parseAndBuildChatCompletionPayload(connection, messages);
+    TextGenerationRequestPayloadDTO requestPayloadDTO =
+        payloadHelper.parseAndBuildChatCompletionPayload(connection, messages,
+                                                         ParseUtils.parseAdditionalRequestAttributes(additionalRequestAttributes,
+                                                                                                     objectMapper));
 
     return executeChatRequestAndFormatResponse(connection, requestPayloadDTO);
   }
 
   public Result<InputStream, LLMResponseAttributes> definePromptTemplate(TextGenerationConnection connection, String template,
-                                                                         String instructions, String data)
+                                                                         String instructions, String data,
+                                                                         InputStream additionalRequestAttributes)
       throws IOException, TimeoutException {
 
     return executeChatRequestAndFormatResponse(connection,
                                                payloadHelper.buildPromptTemplatePayload(connection, template, instructions,
-                                                                                        data));
+                                                                                        data,
+                                                                                        ParseUtils
+                                                                                            .parseAdditionalRequestAttributes(additionalRequestAttributes,
+                                                                                                                              objectMapper)));
   }
 
   public Result<InputStream, LLMResponseAttributes> executeToolsNativeTemplate(TextGenerationConnection connection,
                                                                                String template, String instructions,
-                                                                               String data, InputStream tools)
+                                                                               String data, InputStream tools,
+                                                                               InputStream additionalRequestAttributes)
       throws IOException, TimeoutException {
 
     return executeToolsRequestAndFormatResponse(connection, payloadHelper
-        .buildToolsTemplatePayload(connection, template, instructions, data, tools));
+        .buildToolsTemplatePayload(connection, template, instructions, data, tools,
+                                   ParseUtils.parseAdditionalRequestAttributes(additionalRequestAttributes, objectMapper)));
   }
 
 
   public Result<InputStream, LLMResponseAttributes> executeMcpTools(TextGenerationConnection connection,
-                                                                    SchedulerService schedulerService,
+                                                                    Scheduler scheduler,
                                                                     ExtensionsClient extensionsClient,
                                                                     List<McpConfig> mcpConfigs, String template,
-                                                                    String instructions, String data) {
+                                                                    String instructions, String data,
+                                                                    InputStream additionalRequestAttributes) {
 
-    return mcpHelper.getTools(mcpConfigs, schedulerService, extensionsClient)
+    return mcpHelper.getTools(mcpConfigs, scheduler, extensionsClient)
         .thenApply(collectedTools -> {
           try {
             var toolFunctions = collectedTools.values().stream()
@@ -103,7 +119,9 @@ public class TextGenerationService implements BaseService {
 
             // send tools list to mcp
             TextGenerationRequestPayloadDTO requestPayloadDTO = payloadHelper
-                .buildToolsTemplatePayload(connection, template, instructions, data, toolFunctions);
+                .buildToolsTemplatePayload(connection, template, instructions, data, toolFunctions,
+                                           ParseUtils.parseAdditionalRequestAttributes(additionalRequestAttributes,
+                                                                                       objectMapper));
 
             logger.debug(PAYLOAD_LOGGER_MSG, requestPayloadDTO);
 
@@ -169,4 +187,5 @@ public class TextGenerationService implements BaseService {
     logger.debug("Response of chat REST request: {}", chatResponse);
     return chatResponse;
   }
+
 }
